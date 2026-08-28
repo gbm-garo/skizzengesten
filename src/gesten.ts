@@ -52,6 +52,21 @@ export function rohrAusrichten(striche: Punkt[][], rohrWinkel: number): Punkt[][
   return drehen(striche, -rohrWinkel);
 }
 
+/** Grobe Formmerkmale, die $P nicht sieht: Seitenverhaeltnis (log) und Geschlossenheit (Abstand Anfang-Ende relativ zur Laenge). */
+export function merkmale(striche: Punkt[][]): { seiten: number; geschlossen: number } {
+  const b = bounds(striche);
+  const seiten = Math.log((b.w + 4) / (b.h + 4));
+  let g = 0, n = 0;
+  for (const st of striche) {
+    if (st.length < 2) continue;
+    const l = strichLaenge([st]);
+    if (l <= 0) continue;
+    g += Math.min(1, Math.hypot(st[st.length - 1].x - st[0].x, st[st.length - 1].y - st[0].y) / l);
+    n++;
+  }
+  return { seiten, geschlossen: n ? g / n : 1 };
+}
+
 function resample(striche: Punkt[][]): CloudPunkt[] {
   const gesamt = strichLaenge(striche);
   const I = gesamt / (N - 1);
@@ -133,7 +148,7 @@ export function scoreAusAbstand(abstand: number): number {
 
 export class Gestenerkenner {
   private vorlagen: Vorlage[] = [];
-  private clouds: { symbol: string; cloud: CloudPunkt[]; striche: number }[] = [];
+  private clouds: { symbol: string; cloud: CloudPunkt[]; striche: number; mk: { seiten: number; geschlossen: number } }[] = [];
 
   constructor(vorlagen?: Vorlage[]) {
     if (vorlagen) for (const v of vorlagen) this.hinzufuegen(v);
@@ -142,7 +157,7 @@ export class Gestenerkenner {
   private hinzufuegen(v: Vorlage) {
     if (!v.striche.some((s) => s.length)) return;
     this.vorlagen.push(v);
-    this.clouds.push({ symbol: v.symbol, cloud: normalisieren(v.striche), striche: v.striche.length });
+    this.clouds.push({ symbol: v.symbol, cloud: normalisieren(v.striche), striche: v.striche.length, mk: merkmale(v.striche) });
   }
 
   lernen(symbol: string, striche: Punkt[][], quelle?: string): Vorlage {
@@ -173,18 +188,23 @@ export class Gestenerkenner {
    * Erkennen: liefert je Symbol den besten Treffer, sortiert nach Score (bester zuerst).
    * opts.drehungen: zusaetzliche Drehungen der Eingabe in rad (z.B. [0, Math.PI/2, Math.PI, -Math.PI/2]), Standard [0].
    * opts.strichMalus: Abzug je abweichendem Strich (Standard 0.03) — Hand-Kuerzel schwanken, deshalb klein.
+   * opts.merkmalGewicht: Gewicht der Formmerkmale Seitenverhaeltnis/Geschlossenheit (Standard 0.15).
    */
-  erkennen(striche: Punkt[][], opts?: { drehungen?: number[]; strichMalus?: number }): Treffer[] {
+  erkennen(striche: Punkt[][], opts?: { drehungen?: number[]; strichMalus?: number; merkmalGewicht?: number }): Treffer[] {
     const eingabe = striche.filter((s) => s.length);
     if (!eingabe.length || !this.clouds.length) return [];
     const drehungen = opts?.drehungen && opts.drehungen.length ? opts.drehungen : [0];
     const malus = opts?.strichMalus ?? 0.03;
+    const mg = opts?.merkmalGewicht ?? 0.15;
     const beste = new Map<string, Treffer>();
     for (const w of drehungen) {
-      const cloud = normalisieren(drehen(eingabe, w));
+      const gedreht = drehen(eingabe, w);
+      const cloud = normalisieren(gedreht);
+      const mk = merkmale(gedreht);
       for (const c of this.clouds) {
         const d = greedyCloudMatch(cloud, c.cloud);
-        const score = Math.max(0, scoreAusAbstand(d) - malus * Math.abs(c.striche - eingabe.length));
+        const mkAbstand = Math.abs(mk.seiten - c.mk.seiten) + Math.abs(mk.geschlossen - c.mk.geschlossen);
+        const score = Math.max(0, scoreAusAbstand(d) - malus * Math.abs(c.striche - eingabe.length) - mg * mkAbstand);
         const alt = beste.get(c.symbol);
         if (!alt || score > alt.score) beste.set(c.symbol, { symbol: c.symbol, score, abstand: d, drehung: w });
       }
