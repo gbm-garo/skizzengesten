@@ -20,7 +20,7 @@ const labelVon = (id: string) => SYMBOLE.find((s) => s.id === id)?.label || id;
 
 const SPEICHER = "skizzengesten_vorlagen";
 const PAUSE_MS = 650;      // Pause nach dem letzten Strich, bis erkannt/gespeichert werden kann
-const SCHWELLE = 0.5;      // ab diesem Score gilt ein Treffer als sicher
+const SCHWELLE = 0.45;     // ab diesem Score gilt ein Treffer als sicher
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const pad = $<HTMLCanvasElement>("pad");
