@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <title>Skizzengesten</title>
+    <link rel="stylesheet" href="./src/style.css" />
+  </head>
+  <body>
+    <header class="top">
+      <div class="brand"><span class="dot"></span>Skizzengesten</div>
+      <div class="top-actions">
+        <span id="anzahl" class="pill">0 Vorlagen</span>
+        <button id="btn-export" class="ghost" title="Vorlagen als JSON speichern">Export</button>
+        <button id="btn-import" class="ghost" title="Vorlagen-JSON laden">Import</button>
+        <input id="file-import" type="file" accept="application/json" hidden />
+        <button id="btn-reset" class="ghost danger" title="Alle Vorlagen löschen">Leeren</button>
+      </div>
+    </header>
+
+    <main class="wrap">
+      <section class="pad">
+        <canvas id="pad"></canvas>
+        <div class="pad-hint" id="hint">Symbol aufs Rohr zeichnen</div>
+        <div class="pad-tools">
+          <label class="chk"><input id="chk-rohr" type="checkbox" checked /> Rohr</label>
+          <label class="chk"><input id="chk-drehung" type="checkbox" /> Drehung egal</label>
+          <button id="btn-clear" class="ghost">Löschen</button>
+        </div>
+      </section>
+
+      <aside class="panel">
+        <div class="tabs">
+          <button id="tab-erkennen" class="tab active">Erkennen</button>
+          <button id="tab-anlernen" class="tab">Anlernen</button>
+        </div>
+
+        <div id="view-erkennen" class="view">
+          <div id="ergebnis" class="ergebnis leer">
+            <div class="big" id="erg-icon"></div>
+            <div class="erg-text">
+              <div class="erg-label" id="erg-label">–</div>
+              <div class="erg-score" id="erg-score">Zeichne ein Symbol</div>
+            </div>
+          </div>
+          <div id="erg-liste" class="erg-liste"></div>
+          <div class="bewertung" id="bewertung" hidden>
+            <button id="btn-richtig" class="ok">Richtig</button>
+            <button id="btn-falsch" class="nok">Falsch</button>
+          </div>
+          <div class="stat" id="stat">Trefferquote –</div>
+        </div>
+
+        <div id="view-anlernen" class="view" hidden>
+          <div class="grid" id="symbol-grid"></div>
+          <button id="btn-speichern" class="primary" disabled>Als Vorlage speichern</button>
+          <div class="lernhinweis">Symbol wählen, drei- bis fünfmal zeichnen, jeweils speichern.</div>
+        </div>
+      </aside>
+    </main>
+    <div id="toast" class="toast" hidden></div>
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>
