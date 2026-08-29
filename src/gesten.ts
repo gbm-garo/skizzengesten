@@ -189,8 +189,9 @@ export class Gestenerkenner {
    * opts.drehungen: zusaetzliche Drehungen der Eingabe in rad (z.B. [0, Math.PI/2, Math.PI, -Math.PI/2]), Standard [0].
    * opts.strichMalus: Abzug je abweichendem Strich (Standard 0.03) — Hand-Kuerzel schwanken, deshalb klein.
    * opts.merkmalGewicht: Gewicht der Formmerkmale Seitenverhaeltnis/Geschlossenheit (Standard 0.15).
+   * opts.nur: nur Vorlagen dieser Symbole beruecksichtigen (z.B. nur Schriftzeichen "z_...").
    */
-  erkennen(striche: Punkt[][], opts?: { drehungen?: number[]; strichMalus?: number; merkmalGewicht?: number }): Treffer[] {
+  erkennen(striche: Punkt[][], opts?: { drehungen?: number[]; strichMalus?: number; merkmalGewicht?: number; nur?: (symbol: string) => boolean }): Treffer[] {
     const eingabe = striche.filter((s) => s.length);
     if (!eingabe.length || !this.clouds.length) return [];
     const drehungen = opts?.drehungen && opts.drehungen.length ? opts.drehungen : [0];
@@ -202,6 +203,7 @@ export class Gestenerkenner {
       const cloud = normalisieren(gedreht);
       const mk = merkmale(gedreht);
       for (const c of this.clouds) {
+        if (opts?.nur && !opts.nur(c.symbol)) continue;
         const d = greedyCloudMatch(cloud, c.cloud);
         const mkAbstand = Math.abs(mk.seiten - c.mk.seiten) + Math.abs(mk.geschlossen - c.mk.geschlossen);
         const score = Math.max(0, scoreAusAbstand(d) - malus * Math.abs(c.striche - eingabe.length) - mg * mkAbstand);
@@ -211,4 +213,43 @@ export class Gestenerkenner {
     }
     return Array.from(beste.values()).sort((a, b) => b.score - a.score);
   }
+}
+
+// ---------- Handschrift entlang eines Rohrs (Zeichen sind Vorlagen mit Symbol "z_<zeichen>", z.B. z_7, z_D, z_-) ----------
+
+export const ZEICHEN_PREFIX = "z_";
+export const istZeichen = (symbol: string) => symbol.startsWith(ZEICHEN_PREFIX);
+
+/** Striche (bereits in Rohrrichtung gedreht, x laeuft laengs) zu Zeichen buendeln: ueberlappende oder eng stehende Striche gehoeren zusammen. */
+export function zeichenBuendeln(striche: Punkt[][]): Punkt[][][] {
+  const mit = striche.filter((s) => s.length).map((s) => ({ s, b: bounds([s]) })).sort((a, b) => a.b.minX - b.b.minX);
+  const hoehe = Math.max(8, ...mit.map((m) => m.b.h));
+  const gruppen: { striche: Punkt[][]; maxX: number }[] = [];
+  for (const m of mit) {
+    const g = gruppen[gruppen.length - 1];
+    if (g && m.b.minX <= g.maxX + hoehe * 0.2) { g.striche.push(m.s); g.maxX = Math.max(g.maxX, m.b.maxX); }
+    else gruppen.push({ striche: [m.s], maxX: m.b.maxX });
+  }
+  return gruppen.map((g) => g.striche);
+}
+
+/** Zeichenkette lesen: je Buendel das beste Zeichen; liefert Text und mittleren Score. */
+export function textLesen(g: Gestenerkenner, striche: Punkt[][]): { text: string; score: number; zeichen: { text: string; score: number }[] } {
+  const buendel = zeichenBuendeln(striche);
+  const zeichen = buendel.map((b) => {
+    const t = g.erkennen(b, { nur: istZeichen, strichMalus: 0.05 })[0];
+    return t ? { text: t.symbol.slice(ZEICHEN_PREFIX.length), score: t.score } : { text: "?", score: 0 };
+  });
+  const score = zeichen.length ? zeichen.reduce((a, z) => a + z.score, 0) / zeichen.length : 0;
+  return { text: zeichen.map((z) => z.text).join(""), score, zeichen };
+}
+
+/** "- 7 -" -> Laenge 7; "DN125", "d160" -> Dimension; "45" neben einem Bogen -> Gradzahl (entscheidet der Aufrufer). */
+export function textDeuten(text: string): { laenge?: string; dimension?: string; zahl?: string } {
+  const t = text.replace(/[\s\-_]+/g, "");
+  const dn = t.match(/^DN?(\d{2,4})$/i);
+  if (dn) return { dimension: (t[0] === "d" ? "d" : "DN") + dn[1] };
+  const zahl = t.match(/^(\d+([.,]\d+)?)$/);
+  if (zahl) return { laenge: zahl[1].replace(",", "."), zahl: zahl[1].replace(",", ".") };
+  return {};
 }
