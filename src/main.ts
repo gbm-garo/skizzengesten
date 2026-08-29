@@ -1,4 +1,4 @@
-import { Gestenerkenner, Punkt, Vorlage, Treffer, bounds } from "./gesten";
+import { Gestenerkenner, Punkt, Vorlage, Treffer, bounds, istZeichen, textLesen, textDeuten, ZEICHEN_PREFIX } from "./gesten";
 import { drawSymbolShape } from "./symbols";
 
 // Symbole der Montageskizze (Bibliothek), die per Hand gezeichnet werden sollen
@@ -15,6 +15,8 @@ const SYMBOLE: { id: string; label: string }[] = [
   { id: "schieber", label: "Schieber" },
   { id: "ventil", label: "Ventil" },
   { id: "ut_radial", label: "Hydrant" },
+  // Schriftzeichen fuer Bemassung/Dimension (z_<zeichen>)
+  ...["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "D", "N", "d", "-"].map((z) => ({ id: ZEICHEN_PREFIX + z, label: z })),
 ];
 const labelVon = (id: string) => SYMBOLE.find((s) => s.id === id)?.label || id;
 
@@ -56,6 +58,12 @@ function iconCanvas(symbolId: string, px: number, farbe = "#1f2937"): HTMLCanvas
   c.width = px * dpr; c.height = px * dpr; c.style.width = `${px}px`; c.style.height = `${px}px`;
   const g = c.getContext("2d")!;
   g.scale(dpr, dpr);
+  if (istZeichen(symbolId)) {
+    g.fillStyle = farbe; g.font = `600 ${Math.round(px * 0.7)}px Inter, system-ui, sans-serif`;
+    g.textAlign = "center"; g.textBaseline = "middle";
+    g.fillText(symbolId.slice(ZEICHEN_PREFIX.length), px / 2, px / 2 + 1);
+    return c;
+  }
   zeichneSymbol(g, symbolId, px / 2, px / 2, px, farbe);
   return c;
 }
@@ -160,8 +168,9 @@ function pause() {
   abgeschlossen = true;
   if (modus === "erkennen") {
     const egal = $<HTMLInputElement>("chk-drehung").checked;
-    ergebnis = erkenner.erkennen(striche, { drehungen: egal ? [0, Math.PI / 2, Math.PI, -Math.PI / 2] : [0] });
+    ergebnis = erkenner.erkennen(striche, { drehungen: egal ? [0, Math.PI / 2, Math.PI, -Math.PI / 2] : [0], nur: (sy) => !istZeichen(sy) });
     zeigeErgebnis();
+    zeigeText();
     malen();
   } else {
     $<HTMLButtonElement>("btn-speichern").disabled = false;
@@ -191,6 +200,16 @@ function zeigeErgebnis() {
   }
   $("bewertung").hidden = false;
 }
+function zeigeText() {
+  const alt = document.getElementById("erg-text-zeile"); if (alt) alt.remove();
+  if (!erkenner.symbole().some(istZeichen) || striche.length < 1) return;
+  const t = textLesen(erkenner, striche);
+  const d = textDeuten(t.text);
+  const bedeutung = d.dimension ? `Dimension ${d.dimension}` : d.laenge ? `Länge ${d.laenge}` : "";
+  const z = document.createElement("div"); z.id = "erg-text-zeile"; z.className = "erg-zeile";
+  z.innerHTML = `<span class="nm">Text</span><span style="flex:1;color:var(--ink);font-weight:600">${t.text}${bedeutung ? ` · ${bedeutung}` : ""}</span><span class="pct">${Math.round(t.score * 100)} %</span>`;
+  $("erg-liste").appendChild(z);
+}
 function bewerten(ok: boolean) {
   if (ok) stat.richtig++; else stat.falsch++;
   const n = stat.richtig + stat.falsch;
@@ -206,6 +225,9 @@ $("btn-falsch").addEventListener("click", () => bewerten(false));
 function baueGrid() {
   const grid = $("symbol-grid"); grid.innerHTML = "";
   for (const s of SYMBOLE) {
+    if (s.id === ZEICHEN_PREFIX + "0") {
+      const h = document.createElement("div"); h.className = "grid-trenner"; h.textContent = "Zeichen für Bemassung"; grid.appendChild(h);
+    }
     const t = document.createElement("button");
     t.className = "tile" + (s.id === ziel ? " active" : "");
     t.title = s.label;
